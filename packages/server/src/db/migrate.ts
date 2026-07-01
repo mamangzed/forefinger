@@ -1,18 +1,14 @@
 import { sql } from 'drizzle-orm'
 import { db } from './client.js'
 
-// Idempotent schema statements. Run individually so a failure in one
-// (e.g. type already exists) does not abort the rest. Each is safe to re-run.
+// Idempotent schema statements, run individually. Plain CREATE TYPE (no
+// DO/plpgsql block) — if the type exists the error is caught and we continue.
 const STATEMENTS: string[] = [
   `CREATE EXTENSION IF NOT EXISTS "pgcrypto"`,
 
-  `DO $$ BEGIN
-     CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high');
-   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
-
-  `DO $$ BEGIN
-     CREATE TYPE recommendation AS ENUM ('allow', 'review', 'block');
-   EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  // Enums — plain CREATE; duplicate_object error is expected & swallowed
+  `CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high')`,
+  `CREATE TYPE recommendation AS ENUM ('allow', 'review', 'block')`,
 
   `CREATE TABLE IF NOT EXISTS visitors (
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,16 +97,25 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type, created_at)`
 ]
 
+// Error codes that are safe to ignore (object/type already exists)
+const SAFE_CODES = new Set(['42710', '42P06', '42P07'])
+
 export async function ensureSchema(): Promise<void> {
+  let errors = 0
   for (const stmt of STATEMENTS) {
     try {
       await db.execute(sql.raw(stmt))
     } catch (err) {
-      // Non-fatal: object may already exist or depend on a prior statement
-      // that is still pending. Log and continue; idempotent on re-run.
-      if (process.env.LOG_LEVEL === 'debug') {
-        console.debug('[migrate] skip:', (err as Error).message)
+      const e = err as { code?: string; message?: string }
+      const safe = e.code ? SAFE_CODES.has(e.code) : false
+      // Always log non-safe errors so schema problems are visible.
+      if (!safe) {
+        errors++
+        console.error(`[migrate] failed: ${stmt.slice(0, 80).replace(/\n/g, ' ')}... → ${e.code || ''} ${e.message}`)
       }
     }
+  }
+  if (errors > 0) {
+    console.error(`[migrate] ${errors} statement(s) failed — tables may be missing`)
   }
 }
