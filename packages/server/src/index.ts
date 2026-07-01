@@ -29,16 +29,19 @@ app.use(
   '/cdn/*',
   serveStatic({
     root: '../sdk/dist',
-    rewriteRequestPath: (path) => path.replace(/^\/cdn/, '')
+    rewriteRequestPath: (path) => path.replace(/^\/cdn/, ''),
+    onNotFound: (path, c) => {
+      // Fall through; don't 404 on missing sdk file
+    }
   })
 )
 
-// Serve dashboard SPA
-app.use(
-  '/assets/*',
-  serveStatic({ root: '../dashboard/dist/assets' })
-)
-app.get('*', serveStatic({ root: '../dashboard/dist', path: '/index.html' }))
+// Serve dashboard static assets (JS/CSS chunks)
+app.use('/assets/*', serveStatic({ root: '../dashboard/dist' }))
+
+// SPA fallback: any non-API, non-cdn path serves index.html
+// (React Router handles client-side routing)
+app.get('*', serveStatic({ root: '../dashboard/dist', path: 'index.html' }))
 
 // Error handler
 app.onError((err, c) => {

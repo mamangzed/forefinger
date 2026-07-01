@@ -1,7 +1,7 @@
 import { defineConfig, type Options } from 'tsup'
 
 const shared: Partial<Options> = {
-  entry: ['src/index.ts'],
+  entry: { fp: 'src/index.ts' },
   outDir: 'dist',
   minify: true,
   sourcemap: true,

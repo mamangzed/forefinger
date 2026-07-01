@@ -1,23 +1,33 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api'
+import { Download } from 'lucide-react'
+import { api } from '@/api'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/components/ui/table'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select'
 
-const REC_COLOR: Record<string, string> = {
-  allow: 'text-fp-low',
-  review: 'text-fp-med',
-  block: 'text-fp-high'
+const recVariant: Record<string, 'success' | 'warning' | 'destructive'> = {
+  allow: 'success',
+  review: 'warning',
+  block: 'destructive'
 }
 
 export default function Events() {
   const [events, setEvents] = useState<any[]>([])
-  const [type, setType] = useState('')
-  const [level, setLevel] = useState('')
+  const [type, setType] = useState('all')
+  const [level, setLevel] = useState('all')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
     api
-      .getEvents(100, type || undefined, level || undefined)
+      .getEvents(100, type === 'all' ? undefined : type, level === 'all' ? undefined : level)
       .then((r) => setEvents(r.events))
       .finally(() => setLoading(false))
   }, [type, level])
@@ -42,65 +52,80 @@ export default function Events() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Fraud Events</h1>
-        <button onClick={exportCsv} className="px-4 py-2 bg-fp-primary text-white rounded text-sm">
-          Export CSV
-        </button>
+    <div className="p-8 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Fraud Events</h1>
+          <p className="text-sm text-muted-foreground mt-1">Verified events with risk assessment</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportCsv}>
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
       </div>
 
-      <div className="flex gap-3 mb-4">
-        <select value={type} onChange={(e) => setType(e.target.value)} className="bg-fp-surface border border-fp-border rounded px-3 py-2 text-sm">
-          <option value="">All Types</option>
-          <option value="payment">Payment</option>
-          <option value="login">Login</option>
-          <option value="signup">Signup</option>
-        </select>
-        <select value={level} onChange={(e) => setLevel(e.target.value)} className="bg-fp-surface border border-fp-border rounded px-3 py-2 text-sm">
-          <option value="">All Levels</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
+      <div className="flex gap-3">
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Event type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value="payment">Payment</SelectItem>
+            <SelectItem value="login">Login</SelectItem>
+            <SelectItem value="signup">Signup</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={level} onValueChange={setLevel}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Risk level" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All levels</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="bg-fp-surface border border-fp-border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-fp-bg">
-            <tr>
-              <th className="text-left p-3">Time</th>
-              <th className="text-left p-3">Type</th>
-              <th className="text-left p-3">Visitor</th>
-              <th className="text-left p-3">Score</th>
-              <th className="text-left p-3">Recommendation</th>
-              <th className="text-left p-3">Flags</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Time</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Visitor</TableHead>
+              <TableHead className="w-20">Score</TableHead>
+              <TableHead className="w-32">Recommendation</TableHead>
+              <TableHead>Flags</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <tr><td colSpan={6} className="p-4 text-fp-muted">Loading...</td></tr>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground h-24 text-center">Loading...</TableCell></TableRow>
             ) : events.length === 0 ? (
-              <tr><td colSpan={6} className="p-4 text-fp-muted">No events</td></tr>
+              <TableRow><TableCell colSpan={6} className="text-muted-foreground h-24 text-center">No events</TableCell></TableRow>
             ) : (
               events.map((e) => (
-                <tr key={e.id} className="border-t border-fp-border hover:bg-fp-bg">
-                  <td className="p-3 text-fp-muted text-xs">{new Date(e.createdAt).toLocaleString()}</td>
-                  <td className="p-3">{e.eventType}</td>
-                  <td className="p-3">
-                    <Link to={`/visitors/${e.visitorId}`} className="text-fp-primary hover:underline font-mono text-xs">
-                      {e.visitorId.slice(0, 16)}...
+                <TableRow key={e.id}>
+                  <TableCell className="text-muted-foreground text-xs">{new Date(e.createdAt).toLocaleString()}</TableCell>
+                  <TableCell className="font-medium">{e.eventType}</TableCell>
+                  <TableCell>
+                    <Link to={`/visitors/${e.visitorId}`} className="font-mono text-xs text-primary hover:underline">
+                      {e.visitorId.slice(0, 20)}...
                     </Link>
-                  </td>
-                  <td className="p-3">{e.riskScore}</td>
-                  <td className={`p-3 ${REC_COLOR[e.recommendation]}`}>{e.recommendation}</td>
-                  <td className="p-3 text-xs text-fp-muted">{e.flags?.join(', ')}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="font-mono">{e.riskScore}</TableCell>
+                  <TableCell>
+                    <Badge variant={recVariant[e.recommendation] || 'secondary'}>{e.recommendation}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{e.flags?.join(', ')}</TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   )
 }

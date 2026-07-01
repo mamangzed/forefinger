@@ -3,8 +3,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts'
-import { api, type Stats } from '../api'
-import StatCard from '../components/StatCard'
+import { Users, Activity, Bot, ShieldAlert } from 'lucide-react'
+import { api, type Stats } from '@/api'
+import StatCard from '@/components/StatCard'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const RISK_COLORS = { low: '#22c55e', medium: '#eab308', high: '#ef4444' }
 
@@ -16,65 +18,103 @@ export default function Overview() {
     api.getStats(7).then(setStats).finally(() => setLoading(false))
   }, [])
 
-  if (loading || !stats) return <div className="text-fp-muted">Loading...</div>
+  if (loading || !stats) {
+    return <div className="p-8 text-muted-foreground">Loading...</div>
+  }
 
   const riskData = [
-    { name: 'Low', value: stats.riskDistribution.low, color: RISK_COLORS.low },
-    { name: 'Medium', value: stats.riskDistribution.medium, color: RISK_COLORS.medium },
-    { name: 'High', value: stats.riskDistribution.high, color: RISK_COLORS.high }
+    { name: 'Low', value: stats.riskDistribution.low, fill: RISK_COLORS.low },
+    { name: 'Medium', value: stats.riskDistribution.medium, fill: RISK_COLORS.medium },
+    { name: 'High', value: stats.riskDistribution.high, fill: RISK_COLORS.high }
   ]
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Overview <span className="text-fp-muted text-sm font-normal">(Last 7 days)</span></h1>
-
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Visitors" value={stats.totalVisitors.toLocaleString()} />
-        <StatCard label="Visits Today" value={stats.uniqueToday.toLocaleString()} />
-        <StatCard label="Bots" value={stats.botCount.toLocaleString()} color="text-fp-high" />
-        <StatCard label="High Risk" value={stats.highRiskCount.toLocaleString()} color="text-fp-high" />
+    <div className="p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <p className="text-sm text-muted-foreground mt-1">Last 7 days of visitor activity</p>
       </div>
 
-      <div className="bg-fp-surface border border-fp-border rounded-lg p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Visits Over Time</h2>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={stats.timeseries}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
-            <YAxis stroke="#94a3b8" fontSize={12} />
-            <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155' }} />
-            <Line type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Total Visitors" value={stats.totalVisitors.toLocaleString()} icon={Users} />
+        <StatCard label="Visits Today" value={stats.uniqueToday.toLocaleString()} icon={Activity} />
+        <StatCard label="Bots" value={stats.botCount.toLocaleString()} icon={Bot} tone="danger" />
+        <StatCard label="High Risk" value={stats.highRiskCount.toLocaleString()} icon={ShieldAlert} tone="danger" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-fp-surface border border-fp-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Risk Distribution</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={riskData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                {riskData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155' }} />
-            </PieChart>
+      <Card>
+        <CardHeader>
+          <CardTitle>Visits Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={stats.timeseries}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{
+                  background: 'hsl(var(--popover))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.75rem'
+                }}
+              />
+              <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+            </LineChart>
           </ResponsiveContainer>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="bg-fp-surface border border-fp-border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Top Countries</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={stats.topCountries} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" stroke="#94a3b8" fontSize={12} />
-              <YAxis dataKey="country" type="category" stroke="#94a3b8" fontSize={12} width={40} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155' }} />
-              <Bar dataKey="count" fill="#6366f1" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Risk Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={riskData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
+                  {riskData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.75rem'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Countries</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={stats.topCountries} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis dataKey="country" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={40} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.75rem'
+                  }}
+                />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

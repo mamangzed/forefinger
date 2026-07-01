@@ -8,10 +8,10 @@
   "browser": "./dist/fp.min.js",
   "unpkg": "./dist/fp.min.js",
   "jsdelivr": "./dist/fp.min.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/fp.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/fp.d.ts",
       "import": "./dist/fp.esm.js",
       "require": "./dist/fp.cjs.js",
       "default": "./dist/fp.min.js"
