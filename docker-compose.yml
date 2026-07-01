@@ -9,6 +9,8 @@ services:
       PORT: "3000"
       LOG_LEVEL: info
       ALLOWED_ORIGINS: ""
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-changeme}
     depends_on:
       postgres:
         condition: service_healthy

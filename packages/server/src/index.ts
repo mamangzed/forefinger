@@ -2,10 +2,12 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { apiKeyAuth, rateLimiter, cors } from './middleware/auth.js'
+import { sessionAuth } from './middleware/session.js'
 import { collectRoute } from './routes/collect.js'
 import { identifyRoute } from './routes/identify.js'
 import { verifyRoute } from './routes/verify.js'
 import { dashboardRoute } from './routes/dashboard.js'
+import { authRoute } from './routes/auth.js'
 import { ensureSchema } from './db/migrate.js'
 
 const app = new Hono()
@@ -14,11 +16,13 @@ const app = new Hono()
 app.use('*', cors)
 app.use('/api/*', apiKeyAuth)
 app.use('/api/*', rateLimiter)
+app.use('/api/dashboard/*', sessionAuth) // session gate for dashboard data
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }))
 
 // API routes
+app.route('/api/auth', authRoute)
 app.route('/api/collect', collectRoute)
 app.route('/api/identify', identifyRoute)
 app.route('/api/verify', verifyRoute)

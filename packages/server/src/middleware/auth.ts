@@ -20,8 +20,12 @@ const RATE_LIMITS: Record<string, { limit: number; window: number }> = {
 
 // API key authentication middleware
 export const apiKeyAuth = createMiddleware<AuthEnv>(async (c, next) => {
-  // Dashboard routes use different auth (basic auth or session)
-  if (c.req.path.startsWith('/dashboard') || c.req.path === '/' || c.req.path.startsWith('/cdn/')) {
+  // Dashboard UI + CDN SDK served without API key
+  if (c.req.path === '/' || c.req.path.startsWith('/assets/') || c.req.path.startsWith('/cdn/')) {
+    return next()
+  }
+  // Dashboard API uses session auth (see sessionAuth middleware), not API key
+  if (c.req.path.startsWith('/api/dashboard') || c.req.path.startsWith('/api/auth')) {
     return next()
   }
   if (!c.req.path.startsWith('/api/')) {
@@ -54,7 +58,8 @@ export const apiKeyAuth = createMiddleware<AuthEnv>(async (c, next) => {
 
 // Rate limiting middleware
 export const rateLimiter = createMiddleware<AuthEnv>(async (c, next) => {
-  if (!c.req.path.startsWith('/api/')) {
+  // Only rate-limit SDK endpoints (which carry an API key)
+  if (!c.req.path.startsWith('/api/') || c.req.path.startsWith('/api/dashboard')) {
     return next()
   }
 

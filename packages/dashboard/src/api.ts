@@ -5,6 +5,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...options
   })
+  if (res.status === 401) {
+    // Signal caller to redirect to login
+    throw Object.assign(new Error('unauthorized'), { status: 401, unauthorized: true })
+  }
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
@@ -64,4 +68,31 @@ export const api = {
   getApiKeys: () => request<{ keys: any[] }>(`/api-keys`),
   deleteApiKey: (id: string) =>
     request(`/api-keys/${id}`, { method: 'DELETE' })
+}
+
+export const auth = {
+  login: async (user: string, password: string) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user, password })
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw Object.assign(new Error('login failed'), { status: res.status, detail: err.error })
+    }
+    return res.json()
+  },
+  me: async (): Promise<{ authenticated: boolean; user?: string }> => {
+    const res = await fetch('/api/auth/me')
+    if (res.status === 401) return { authenticated: false }
+    return res.json()
+  },
+  logout: async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  }
+}
+
+export function isUnauthorized(err: unknown): boolean {
+  return err instanceof Error && (err as any).unauthorized === true
 }
