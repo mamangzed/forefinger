@@ -57,9 +57,19 @@ async function start() {
     console.error('[db] schema setup failed:', err)
   }
 
-  serve({ fetch: app.fetch, port }, (info) => {
-    console.log(`[server] fingerprint SaaS running on http://localhost:${info.port}`)
-  })
+  try {
+    serve({ fetch: app.fetch, port }, (info) => {
+      console.log(`[server] fingerprint SaaS running on http://localhost:${info.port}`)
+    })
+  } catch (err) {
+    console.error('[server] failed to bind port', port, err)
+    process.exit(1)
+  }
 }
+
+// Crash protection - log unhandled rejections instead of silent exit
+process.on('unhandledRejection', (err) => {
+  console.error('[server] unhandled rejection:', err)
+})
 
 start()
