@@ -108,7 +108,9 @@ export function collectBehavior(durationMs = SAMPLE_WINDOW_MS): Promise<Behavior
         mouseMoveDistanceMean: mean(mouseDistances),
         mouseStraightness: straightness(mousePositions),
         keydowns: keyTimes.length,
-        keyIntervalStd: stddev(keyIntervals.map((t, i) => i > 0 ? t - keyTimes[i - 1] : 0).slice(1)),
+        keyIntervalStd: stddev(
+          keyTimes.map((t, i) => (i > 0 ? t - keyTimes[i - 1] : 0)).slice(1)
+        ),
         scrolls,
         scrollVelocityChanges: countChanges(scrollVelocities),
         touches,
