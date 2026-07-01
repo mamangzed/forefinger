@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fingerprint SDK Demo</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: #0f172a; color: #e2e8f0; padding: 2rem; line-height: 1.5;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; }
+      h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+      p.sub { color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.9rem; }
+      .config {
+        background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem;
+        padding: 1rem; margin-bottom: 1rem;
+      }
+      label { display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem; }
+      input[type=text] {
+        width: 100%; padding: 0.5rem 0.75rem; background: #0f172a; border: 1px solid #334155;
+        border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; font-family: monospace;
+      }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+      button {
+        background: #6366f1; color: white; border: none; border-radius: 0.375rem;
+        padding: 0.6rem 1rem; font-size: 0.875rem; font-weight: 500; cursor: pointer;
+        width: 100%; margin-top: 0.25rem;
+      }
+      button:hover { background: #5457e5; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .result {
+        background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem;
+        padding: 1rem; margin-top: 1rem; display: none;
+      }
+      .result.show { display: block; }
+      pre {
+        background: #0f172a; padding: 0.75rem; border-radius: 0.375rem; overflow-x: auto;
+        font-size: 0.8rem; color: #a5b4fc;
+      }
+      .stat { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.85rem; }
+      .stat:last-child { border-bottom: none; }
+      .stat .v { color: #6366f1; font-family: monospace; }
+      .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; }
+      .ok { background: #22c55e22; color: #4ade80; }
+      .warn { background: #eab30822; color: #facc15; }
+      .bad { background: #ef444422; color: #f87171; }
+      .status { margin-top: 0.75rem; font-size: 0.8rem; color: #94a3b8; min-height: 1.2rem; }
+      .hint { font-size: 0.75rem; color: #64748b; margin-top: 1.5rem; }
+      a { color: #818cf8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Fingerprint SDK Demo</h1>
+      <p class="sub">Test the browser SDK against your self-hosted fingerprint server.</p>
+
+      <div class="config">
+        <div class="row">
+          <div>
+            <label>API Key</label>
+            <input type="text" id="apiKey" placeholder="fp_live_xxx" />
+          </div>
+          <div>
+            <label>Collect Endpoint</label>
+            <input type="text" id="endpoint" placeholder="http://localhost:3000/api/collect" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>linkedId (optional)</label>
+            <input type="text" id="linkedId" placeholder="user-123" />
+          </div>
+          <div>
+            <label>tag (optional)</label>
+            <input type="text" id="tag" placeholder="checkout" />
+          </div>
+        </div>
+        <label>
+          <input type="checkbox" id="behavior" checked style="width:auto;margin-right:0.5rem" />
+          Collect behavior (adds ~4s)
+        </label>
+        <button id="btn">Collect fingerprint</button>
+        <div class="status" id="status"></div>
+      </div>
+
+      <div class="result" id="result">
+        <div class="stat"><span>Visitor ID</span><span class="v" id="vId"></span></div>
+        <div class="stat"><span>Confidence</span><span class="v" id="vConf"></span></div>
+        <div class="stat"><span>New visitor</span><span class="v" id="vNew"></span></div>
+        <div class="stat"><span>Similarity</span><span class="v" id="vSim"></span></div>
+        <div class="stat"><span>Location</span><span class="v" id="vGeo"></span></div>
+        <div class="stat"><span>VPN</span><span class="v" id="vVpn"></span></div>
+        <div class="stat"><span>Incognito</span><span class="v" id="vIncog"></span></div>
+        <div class="stat"><span>Bot / Automation</span><span class="v" id="vBot"></span></div>
+        <div class="stat"><span>Risk score</span><span class="v" id="vRisk"></span></div>
+        <div class="stat"><span>Recommendation</span><span class="v" id="vRec"></span></div>
+        <div class="stat"><span>Flags</span><span class="v" id="vFlags"></span></div>
+        <details style="margin-top:0.75rem">
+          <summary style="cursor:pointer;color:#94a3b8;font-size:0.8rem">Full response</summary>
+          <pre id="full" style="margin-top:0.5rem"></pre>
+        </details>
+      </div>
+
+      <p class="hint">
+        Demo loads the built SDK from <code>dist/fp.esm.js</code> (this package).
+        Run <code>pnpm --filter @yourfp/sdk build</code> after editing SDK source.
+        Point endpoint at your server (e.g. <code>http://localhost:3000/api/collect</code>).
+      </p>
+    </div>
+
+    <script type="module">
+      import { collect } from './dist/fp.esm.js'
+
+      const $ = (id) => document.getElementById(id)
+      const btn = $('btn')
+
+      // Persist config
+      const cfg = JSON.parse(localStorage.getItem('fp_demo') || '{}')
+      if (cfg.apiKey) $('apiKey').value = cfg.apiKey
+      if (cfg.endpoint) $('endpoint').value = cfg.endpoint
+      else $('endpoint').value = 'http://localhost:3000/api/collect'
+      if (cfg.linkedId) $('linkedId').value = cfg.linkedId
+      if (cfg.tag) $('tag').value = cfg.tag
+
+      function save() {
+        localStorage.setItem('fp_demo', JSON.stringify({
+          apiKey: $('apiKey').value, endpoint: $('endpoint').value,
+          linkedId: $('linkedId').value, tag: $('tag').value
+        }))
+      }
+
+      function setStatus(msg, cls) {
+        const s = $('status')
+        s.textContent = msg
+        s.style.color = cls === 'bad' ? '#f87171' : cls === 'ok' ? '#4ade80' : '#94a3b8'
+      }
+
+      const recClass = { allow: 'ok', review: 'warn', block: 'bad' }
+      const lvlClass = { low: 'ok', medium: 'warn', high: 'bad' }
+
+      function badge(text, cls) {
+        return `<span class="badge ${cls}">${text}</span>`
+      }
+
+      btn.addEventListener('click', async () => {
+        const apiKey = $('apiKey').value.trim()
+        const endpoint = $('endpoint').value.trim()
+        const linkedId = $('linkedId').value.trim() || undefined
+        const tag = $('tag').value.trim() || undefined
+        const behavior = $('behavior').checked
+
+        if (!apiKey) { setStatus('API key required', 'bad'); return }
+        if (!endpoint) { setStatus('Endpoint required', 'bad'); return }
+        save()
+
+        btn.disabled = true
+        $('result').classList.remove('show')
+        setStatus(behavior ? 'Collecting (behavior sample ~4s)…' : 'Collecting…')
+
+        try {
+          const t0 = performance.now()
+          const r = await collect({ apiKey, endpoint, linkedId, tag, behavior })
+          const ms = Math.round(performance.now() - t0)
+
+          $('vId').textContent = r.visitorId
+          $('vConf').textContent = r.confidence != null ? `${Math.round(r.confidence * 100)}%` : '—'
+          $('vNew').innerHTML = r.isNew === false ? badge('returning', 'ok') : badge('new', 'warn')
+          $('vSim').textContent = `${r.similarity}%`
+
+          const geo = r.geo
+          $('vGeo').textContent = geo && geo.city ? `${geo.city}, ${geo.countryName || geo.country}` : (geo && geo.country ? geo.countryName || geo.country : 'unknown')
+
+          const risk = r.risk
+          if (risk) {
+            $('vVpn').innerHTML = risk.signals.vpn ? badge('detected', 'bad') : badge('no', 'ok')
+            $('vIncog').innerHTML = risk.signals.incognito ? badge('detected', 'warn') : badge('no', 'ok')
+            $('vBot').innerHTML = (risk.signals.bot || risk.signals.automation) ? badge('detected', 'bad') : badge('no', 'ok')
+            $('vRisk').innerHTML = badge(`${risk.riskScore}/100`, lvlClass[risk.riskLevel] || 'ok')
+            $('vRec').innerHTML = badge(risk.recommendation, recClass[risk.recommendation] || 'ok')
+            $('vFlags').textContent = risk.flags.length ? risk.flags.join(', ') : 'none'
+          }
+
+          $('full').textContent = JSON.stringify(r, null, 2)
+          $('result').classList.add('show')
+          setStatus(`Done in ${ms}ms`, 'ok')
+        } catch (err) {
+          setStatus(`Error: ${err.message}`, 'bad')
+        } finally {
+          btn.disabled = false
+        }
+      })
+    </script>
+  </body>
+</html>

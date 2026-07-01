@@ -89,7 +89,8 @@ export const cors = createMiddleware<AuthEnv>(async (c, next) => {
   if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
     c.header('Access-Control-Allow-Origin', origin)
     c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type, X-FP-Key, Authorization')
+    c.header('Access-Control-Allow-Headers', 'Content-Type, X-FP-Key, X-FP-Timestamp, X-FP-Signature, Authorization')
+    c.header('Access-Control-Expose-Headers', 'X-RateLimit-Remaining, X-RateLimit-Reset')
     c.header('Access-Control-Max-Age', '86400')
   }
 
