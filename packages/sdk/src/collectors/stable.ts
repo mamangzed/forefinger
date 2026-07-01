@@ -35,6 +35,18 @@ function getGpuInfo(): { vendor: string; renderer: string } {
       canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null
     if (!gl) return { vendor: 'unknown', renderer: 'unknown' }
 
+    // Firefox exposes the real GPU via the standard RENDERER/VENDOR params and
+    // has deprecated WEBGL_debug_renderer_info (removal planned). Chrome/Edge
+    // obfuscate the standard params, so they need the unmasked extension.
+    const isFirefox = /firefox\//i.test(navigator.userAgent)
+
+    if (isFirefox) {
+      const renderer = gl.getParameter(gl.RENDERER) as string
+      const vendor = gl.getParameter(gl.VENDOR) as string
+      // Firefox returns "Mozilla" / "Mozilla" in privacy mode; otherwise real GPU
+      return { vendor: vendor || 'unknown', renderer: renderer || 'unknown' }
+    }
+
     const ext = gl.getExtension('WEBGL_debug_renderer_info')
     if (!ext) return { vendor: 'unknown', renderer: 'unknown' }
 
