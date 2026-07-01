@@ -1,0 +1,40 @@
+{
+  "name": "@yourfp/server",
+  "version": "0.1.0",
+  "description": "Fingerprint SaaS backend - Hono API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "hono": "^4.5.0",
+    "@hono/node-server": "^1.10.0",
+    "drizzle-orm": "^0.31.0",
+    "postgres": "^3.4.0",
+    "ioredis": "^5.4.0",
+    "zod": "^3.23.0",
+    "@hono/zod-validator": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0",
+    "drizzle-kit": "^0.23.0"
+  }
+}

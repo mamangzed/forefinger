@@ -1,0 +1,25 @@
+{
+  "name": "fingerprint",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-hosted browser fingerprint SaaS",
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "db:generate": "pnpm --filter @yourfp/server db:generate",
+    "db:push": "pnpm --filter @yourfp/server db:push"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.21.0"
+    }
+  },
+  "packageManager": "pnpm@9.0.0"
+}

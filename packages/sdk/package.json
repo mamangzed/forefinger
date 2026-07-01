@@ -1,0 +1,32 @@
+{
+  "name": "@yourfp/sdk",
+  "version": "0.1.0",
+  "description": "Browser fingerprint SDK - collect device signals",
+  "type": "module",
+  "main": "./dist/fp.cjs.js",
+  "module": "./dist/fp.esm.js",
+  "browser": "./dist/fp.min.js",
+  "unpkg": "./dist/fp.min.js",
+  "jsdelivr": "./dist/fp.min.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/fp.esm.js",
+      "require": "./dist/fp.cjs.js",
+      "default": "./dist/fp.min.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0",
+    "jsdom": "^24.0.0"
+  }
+}
