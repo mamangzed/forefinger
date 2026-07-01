@@ -39,11 +39,12 @@ collectRoute.post('/', zValidator('json', collectSchema), async (c) => {
     userAgent
   )
 
-  // Risk assessment
+  // Risk assessment — pass geo country for region spoofing detection
   const risk = await assessRisk({
     signals: body.signals as unknown as Parameters<typeof assessRisk>[0]['signals'],
     ip,
     userAgent,
+    ipCountry: identified.geo?.country || undefined,
     visitorId: identified.visitorId
   })
 
@@ -51,6 +52,7 @@ collectRoute.post('/', zValidator('json', collectSchema), async (c) => {
     visitorId: identified.visitorId,
     isNew: identified.isNew,
     similarity: identified.similarity,
+    geo: identified.geo,
     risk
   })
 })

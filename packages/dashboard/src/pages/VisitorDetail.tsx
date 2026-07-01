@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Shield, Cpu, Monitor, Globe, Activity } from 'lucide-react'
+import { ArrowLeft, Shield, Cpu, Monitor, Globe, Activity, MapPin } from 'lucide-react'
 import { api } from '@/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -108,6 +108,19 @@ export default function VisitorDetail() {
         </CardContent>
       </Card>
 
+      <div className="grid md:grid-cols-3 gap-4">
+        {Array.from(new Set(data.visits.map((v) => [v.city, v.countryName].filter(Boolean).join(', ')).filter(Boolean)))
+          .slice(0, 3)
+          .map((loc, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Location</p>
+                <p className="text-sm font-medium mt-1">{loc}</p>
+              </CardContent>
+            </Card>
+          ))}
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
@@ -141,14 +154,25 @@ export default function VisitorDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Visit History ({data.visits.length})</CardTitle>
+          <CardTitle className="text-base">Login & Visit History ({data.visits.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-1 max-h-72 overflow-auto">
             {data.visits.slice(0, 30).map((v) => (
-              <div key={v.id} className="flex items-center justify-between text-sm py-2 border-b border-border/50 last:border-0">
-                <span className="text-muted-foreground">{new Date(v.createdAt).toLocaleString()}</span>
-                <div className="flex items-center gap-3">
+              <div key={v.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-sm py-2 border-b border-border/50 last:border-0">
+                <span className="text-muted-foreground whitespace-nowrap">{new Date(v.createdAt).toLocaleString()}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {[v.city, v.countryName].filter(Boolean).join(', ') || (v.ip ? v.ip : 'unknown location')}
+                  </span>
+                  {v.country && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                      {v.country}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 whitespace-nowrap">
                   {v.riskScore != null && <span className="font-mono">{v.riskScore}</span>}
                   {v.flags?.length > 0 && (
                     <span className="text-xs text-muted-foreground">{v.flags.join(', ')}</span>

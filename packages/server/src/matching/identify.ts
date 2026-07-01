@@ -1,8 +1,10 @@
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db, schema } from '../db/client.js'
 import { computeStableHash } from './stable-hash.js'
+import { computeDeviceHash, normalizeGpu } from './device-hash.js'
 import { compareVolatile, type SimilarityResult } from './similarity.js'
 import { cacheGet, cacheSet } from '../cache/redis.js'
+import { lookupGeo, type GeoResult } from '../geo/lookup.js'
 import type { CollectedSignals, RiskResult } from '../types.js'
 
 export interface IdentifyResult {
@@ -11,6 +13,7 @@ export interface IdentifyResult {
   similarity: number
   matched: boolean
   risk?: RiskResult
+  geo?: GeoResult
 }
 
 export async function identifyVisitor(
@@ -19,26 +22,22 @@ export async function identifyVisitor(
   ip: string,
   userAgent: string
 ): Promise<IdentifyResult> {
-  // Recompute hash server-side for integrity
-  const serverHash = computeStableHash(signals.stable)
+  // Recompute hashes server-side for integrity
+  const stableHash = computeStableHash(signals.stable)
+  const deviceHash = computeDeviceHash(signals.stable)
 
-  // If client hash doesn't match, trust server hash
-  const stableHash = serverHash === clientStableHash ? serverHash : serverHash
+  // Resolve IP geolocation (cached)
+  const geo = await lookupGeo(ip)
 
-  // Check cache first
-  const cacheKey = `visitor:hash:${stableHash}`
+  // 1. Cache by device hash (cross-browser stable)
+  const cacheKey = `visitor:device:${deviceHash}`
   const cached = await cacheGet<{ visitorId: string }>(cacheKey)
   if (cached) {
-    await touchVisitor(cached.visitorId, signals, ip, userAgent, 100, true)
-    return {
-      visitorId: cached.visitorId,
-      isNew: false,
-      similarity: 100,
-      matched: true
-    }
+    await touchVisitor(cached.visitorId, signals, ip, userAgent, geo, 100, true)
+    return { visitorId: cached.visitorId, isNew: false, similarity: 100, matched: true, geo }
   }
 
-  // Lookup by stable hash - direct match
+  // 2. Direct lookup by stable_hash (same browser, exact match)
   const directMatch = await db
     .select()
     .from(schema.visitors)
@@ -47,29 +46,42 @@ export async function identifyVisitor(
 
   if (directMatch.length > 0) {
     const existing = directMatch[0]
-    // Verify with volatile similarity
+    await ensureDeviceHash(existing.visitorId, deviceHash)
+    await touchVisitor(existing.visitorId, signals, ip, userAgent, geo, 100, true)
+    await cacheSet(cacheKey, { visitorId: existing.visitorId }, 3600)
+    return { visitorId: existing.visitorId, isNew: false, similarity: 100, matched: true, geo }
+  }
+
+  // 3. Cross-browser device hash lookup (Chrome vs Firefox on same device)
+  const deviceMatch = await db
+    .select()
+    .from(schema.visitors)
+    .where(eq(schema.visitors.deviceHash, deviceHash))
+    .limit(1)
+
+  if (deviceMatch.length > 0) {
+    const existing = deviceMatch[0]
+    // Verify with volatile similarity — device hash can collide across similar VMs
     const storedVolatile = extractVolatile(existing.signals)
     const similarity = compareVolatile(signals.volatile, storedVolatile)
-
-    await touchVisitor(
-      existing.visitorId,
-      signals,
-      ip,
-      userAgent,
-      similarity.score,
-      similarity.matched
-    )
-    await cacheSet(cacheKey, { visitorId: existing.visitorId }, 3600)
-
-    return {
-      visitorId: existing.visitorId,
-      isNew: false,
-      similarity: similarity.score,
-      matched: similarity.matched
+    if (similarity.score >= 30) {
+      // Cross-browser match: stable hash differs but same physical device.
+      // Link this stable_hash to the existing visitor for future exact hits.
+      await ensureStableHash(existing.visitorId, stableHash, 'cross-browser')
+      await ensureDeviceHash(existing.visitorId, deviceHash)
+      await touchVisitor(existing.visitorId, signals, ip, userAgent, geo, similarity.score, similarity.matched)
+      await cacheSet(cacheKey, { visitorId: existing.visitorId }, 3600)
+      return {
+        visitorId: existing.visitorId,
+        isNew: false,
+        similarity: similarity.score,
+        matched: similarity.matched,
+        geo
+      }
     }
   }
 
-  // Check historical hashes (browser evolution)
+  // 4. Historical stable hash (browser version evolution)
   const hashMatch = await db
     .select()
     .from(schema.visitorHashes)
@@ -86,30 +98,26 @@ export async function identifyVisitor(
       const storedVolatile = extractVolatile(existing[0].signals)
       const similarity = compareVolatile(signals.volatile, storedVolatile)
       if (similarity.matched) {
-        await touchVisitor(
-          existing[0].visitorId,
-          signals,
-          ip,
-          userAgent,
-          similarity.score,
-          true
-        )
+        await ensureDeviceHash(existing[0].visitorId, deviceHash)
+        await touchVisitor(existing[0].visitorId, signals, ip, userAgent, geo, similarity.score, true)
         await cacheSet(cacheKey, { visitorId: existing[0].visitorId }, 3600)
         return {
           visitorId: existing[0].visitorId,
           isNew: false,
           similarity: similarity.score,
-          matched: true
+          matched: true,
+          geo
         }
       }
     }
   }
 
-  // No match - create new visitor
+  // 5. New visitor
   const visitorId = generateVisitorId()
   await db.insert(schema.visitors).values({
     visitorId,
     stableHash,
+    deviceHash,
     signals: signals as unknown as Record<string, unknown>,
     riskScore: 0,
     riskLevel: 'low',
@@ -122,20 +130,17 @@ export async function identifyVisitor(
     stableHash,
     source: 'initial'
   })
-  await logVisit(visitorId, signals, ip, userAgent, 100, [], true)
+  await db.insert(schema.deviceHashes).values({
+    visitorId,
+    deviceHash
+  })
+  await logVisit(visitorId, signals, ip, userAgent, geo, 100, [])
   await cacheSet(cacheKey, { visitorId }, 3600)
 
-  return {
-    visitorId,
-    isNew: true,
-    similarity: 100,
-    matched: true
-  }
+  return { visitorId, isNew: true, similarity: 100, matched: true, geo }
 }
 
-function extractVolatile(
-  signals: unknown
-): import('../types.js').VolatileSignals {
+function extractVolatile(signals: unknown): import('../types.js').VolatileSignals {
   const s = signals as { volatile?: import('../types.js').VolatileSignals }
   return (
     s.volatile || {
@@ -154,6 +159,7 @@ async function touchVisitor(
   signals: CollectedSignals,
   ip: string,
   userAgent: string,
+  geo: GeoResult,
   similarity: number,
   matched: boolean
 ): Promise<void> {
@@ -165,7 +171,7 @@ async function touchVisitor(
       signals: signals as unknown as Record<string, unknown>
     })
     .where(eq(schema.visitors.visitorId, visitorId))
-  await logVisit(visitorId, signals, ip, userAgent, similarity, [], matched)
+  await logVisit(visitorId, signals, ip, userAgent, geo, similarity, [])
 }
 
 async function logVisit(
@@ -173,19 +179,51 @@ async function logVisit(
   signals: CollectedSignals,
   ip: string,
   userAgent: string,
+  geo: GeoResult,
   similarity: number,
-  flags: string[],
-  matched: boolean
+  flags: string[]
 ): Promise<void> {
   await db.insert(schema.visits).values({
     visitorId,
     ip: ip || null,
+    country: geo.country,
+    countryName: geo.countryName,
+    city: geo.city,
+    latitude: geo.latitude,
+    longitude: geo.longitude,
     userAgent,
     signals: signals as unknown as Record<string, unknown>,
     similarity,
     riskScore: 0,
     flags
   })
+}
+
+async function ensureDeviceHash(visitorId: string, deviceHash: string): Promise<void> {
+  try {
+    await db
+      .insert(schema.deviceHashes)
+      .values({ visitorId, deviceHash })
+      .onConflictDoNothing({ target: [schema.deviceHashes.visitorId, schema.deviceHashes.deviceHash] })
+  } catch {
+    // ignore dup
+  }
+  // Also persist on the visitors row for direct indexing
+  await db
+    .update(schema.visitors)
+    .set({ deviceHash })
+    .where(eq(schema.visitors.visitorId, visitorId))
+}
+
+async function ensureStableHash(visitorId: string, stableHash: string, source: string): Promise<void> {
+  try {
+    await db
+      .insert(schema.visitorHashes)
+      .values({ visitorId, stableHash, source })
+      .onConflictDoNothing({ target: [schema.visitorHashes.visitorId, schema.visitorHashes.stableHash] })
+  } catch {
+    // ignore dup
+  }
 }
 
 function generateVisitorId(): string {

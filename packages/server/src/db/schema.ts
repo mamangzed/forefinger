@@ -24,6 +24,7 @@ export const visitors = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     visitorId: varchar('visitor_id', { length: 64 }).notNull().unique(),
     stableHash: varchar('stable_hash', { length: 64 }).notNull(),
+    deviceHash: varchar('device_hash', { length: 48 }),
     signals: jsonb('signals').notNull(),
     riskScore: integer('risk_score').default(0).notNull(),
     riskLevel: riskLevelEnum('risk_level').default('low').notNull(),
@@ -36,6 +37,7 @@ export const visitors = pgTable(
   },
   (t) => ({
     stableHashIdx: index('idx_visitors_stable_hash').on(t.stableHash),
+    deviceHashIdx: index('idx_visitors_device_hash').on(t.deviceHash),
     riskIdx: index('idx_visitors_risk').on(t.riskScore),
     lastSeenIdx: index('idx_visitors_last_seen').on(t.lastSeen),
     flagsIdx: index('idx_visitors_flags').on(t.flags),
@@ -66,6 +68,10 @@ export const visits = pgTable(
     visitorId: varchar('visitor_id', { length: 64 }).notNull(),
     ip: inet('ip'),
     country: varchar('country', { length: 2 }),
+    countryName: varchar('country_name', { length: 64 }),
+    city: varchar('city', { length: 64 }),
+    latitude: real('latitude'),
+    longitude: real('longitude'),
     userAgent: text('user_agent'),
     signals: jsonb('signals'),
     similarity: real('similarity'),
@@ -76,7 +82,25 @@ export const visits = pgTable(
   },
   (t) => ({
     visitorIdx: index('idx_visits_visitor').on(t.visitorId, t.createdAt),
-    createdIdx: index('idx_visits_created').on(t.createdAt)
+    createdIdx: index('idx_visits_created').on(t.createdAt),
+    countryIdx: index('idx_visits_country').on(t.country)
+  })
+)
+
+// Cross-browser device hashes — maps a normalized device fingerprint to a
+// visitor so the same physical device is recognized across Chrome/Firefox/Edge.
+export const deviceHashes = pgTable(
+  'device_hashes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    visitorId: varchar('visitor_id', { length: 64 }).notNull(),
+    deviceHash: varchar('device_hash', { length: 48 }).notNull(),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull()
+  },
+  (t) => ({
+    hashIdx: index('idx_device_hashes_hash').on(t.deviceHash),
+    visitorIdx: index('idx_device_hashes_visitor').on(t.visitorId),
+    uniq: uniqueIndex('idx_device_hashes_uniq').on(t.visitorId, t.deviceHash)
   })
 )
 

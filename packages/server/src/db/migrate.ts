@@ -14,6 +14,7 @@ const STATEMENTS: string[] = [
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
      visitor_id    VARCHAR(64) UNIQUE NOT NULL,
      stable_hash   VARCHAR(64) NOT NULL,
+     device_hash   VARCHAR(48),
      signals       JSONB NOT NULL,
      risk_score    INTEGER NOT NULL DEFAULT 0,
      risk_level    risk_level NOT NULL DEFAULT 'low',
@@ -24,6 +25,17 @@ const STATEMENTS: string[] = [
      linked_accounts TEXT[] NOT NULL DEFAULT '{}',
      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+
+  `ALTER TABLE visitors ADD COLUMN IF NOT EXISTS device_hash VARCHAR(48)`,
+
+  `CREATE TABLE IF NOT EXISTS device_hashes (
+     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     visitor_id    VARCHAR(64) NOT NULL,
+     device_hash   VARCHAR(48) NOT NULL,
+     added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_device_hashes_uniq ON device_hashes(visitor_id, device_hash)`,
 
   `CREATE TABLE IF NOT EXISTS visitor_hashes (
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -38,6 +50,10 @@ const STATEMENTS: string[] = [
      visitor_id    VARCHAR(64) NOT NULL,
      ip            INET,
      country       VARCHAR(2),
+     country_name  VARCHAR(64),
+     city          VARCHAR(64),
+     latitude      FLOAT,
+     longitude     FLOAT,
      user_agent    TEXT,
      signals       JSONB,
      similarity    FLOAT,
@@ -46,6 +62,11 @@ const STATEMENTS: string[] = [
      flags         TEXT[] NOT NULL DEFAULT '{}',
      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
+
+  `ALTER TABLE visits ADD COLUMN IF NOT EXISTS country_name VARCHAR(64)`,
+  `ALTER TABLE visits ADD COLUMN IF NOT EXISTS city VARCHAR(64)`,
+  `ALTER TABLE visits ADD COLUMN IF NOT EXISTS latitude FLOAT`,
+  `ALTER TABLE visits ADD COLUMN IF NOT EXISTS longitude FLOAT`,
 
   `CREATE TABLE IF NOT EXISTS events (
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,6 +106,7 @@ const STATEMENTS: string[] = [
    )`,
 
   `CREATE INDEX IF NOT EXISTS idx_visitors_stable_hash ON visitors(stable_hash)`,
+  `CREATE INDEX IF NOT EXISTS idx_visitors_device_hash ON visitors(device_hash)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_risk ON visitors(risk_score)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_flags ON visitors USING GIN(flags)`,
@@ -93,6 +115,7 @@ const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_visitor_hashes_visitor ON visitor_hashes(visitor_id)`,
   `CREATE INDEX IF NOT EXISTS idx_visits_visitor ON visits(visitor_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_visits_country ON visits(country)`,
   `CREATE INDEX IF NOT EXISTS idx_events_visitor ON events(visitor_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type, created_at)`
 ]
