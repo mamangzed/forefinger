@@ -45,6 +45,8 @@ export interface RiskResult {
     multiAccounting: boolean
     newDevice: boolean
     suspiciousVelocity: boolean
+    vm: boolean
+    automation: boolean
   }
 }
 

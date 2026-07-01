@@ -32,6 +32,20 @@ export interface NetworkSignals {
   acceptLanguage: string
 }
 
+export interface BehaviorSample {
+  mouseMoves: number
+  mouseMoveIntervalStd: number
+  mouseMoveDistanceMean: number
+  mouseStraightness: number
+  keydowns: number
+  keyIntervalStd: number
+  scrolls: number
+  scrollVelocityChanges: number
+  touches: number
+  durationMs: number
+  idleRatio: number
+}
+
 export interface CollectedSignals {
   stable: StableSignals
   volatile: VolatileSignals
@@ -44,6 +58,7 @@ export interface CollectedSignals {
     indexedDbBlocked: boolean
     localStorageBlocked: boolean
   }
+  behavior?: BehaviorSample
   timestamp: number
 }
 
@@ -51,6 +66,14 @@ export interface CollectOptions {
   endpoint?: string
   apiKey?: string
   sendToServer?: boolean
+  /** Customer business identifier to group visits (e.g. userId, order id) */
+  linkedId?: string
+  /** Free-form tag for the visit */
+  tag?: string
+  /** Collect behavioral biometrics (mouse/keyboard/scroll). Adds ~4s. Default true. */
+  behavior?: boolean
+  /** Behavior sample window in ms. Default 4000. */
+  behaviorDuration?: number
 }
 
 export interface RiskResult {
@@ -64,5 +87,6 @@ export interface CollectResult {
   visitorId: string
   stableHash: string
   signals: CollectedSignals
+  confidence?: number
   risk?: RiskResult
 }

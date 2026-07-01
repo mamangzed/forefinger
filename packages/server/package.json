@@ -28,8 +28,7 @@
     "postgres": "^3.4.0",
     "ioredis": "^5.4.0",
     "zod": "^3.23.0",
-    "@hono/zod-validator": "^0.2.0",
-    "maxmind": "^4.3.0"
+    "@hono/zod-validator": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

@@ -4,7 +4,7 @@ import { computeStableHash } from './stable-hash.js'
 import { computeDeviceHash, normalizeGpu } from './device-hash.js'
 import { compareVolatile, type SimilarityResult } from './similarity.js'
 import { cacheGet, cacheSet } from '../cache/redis.js'
-import { lookupGeo, type GeoResult } from '../geo/lookup.js'
+import { lookupGeo, type GeoResult } from '../geo/ipinfo.js'
 import type { CollectedSignals, RiskResult } from '../types.js'
 
 export interface IdentifyResult {
@@ -47,9 +47,56 @@ export async function identifyVisitor(
   if (directMatch.length > 0) {
     const existing = directMatch[0]
     await ensureDeviceHash(existing.visitorId, deviceHash)
+    await ensureCanvasHash(existing.visitorId, signals.volatile)
     await touchVisitor(existing.visitorId, signals, ip, userAgent, geo, 100, true)
     await cacheSet(cacheKey, { visitorId: existing.visitorId }, 3600)
     return { visitorId: existing.visitorId, isNew: false, similarity: 100, matched: true, geo }
+  }
+
+  // 2b. Canvas hash lookup — links incognito sessions of the SAME browser.
+  // Canvas output depends on GPU/driver/font rendering, not browsing state,
+  // so identical canvas (+ matching audio) across private windows = same browser.
+  const canvasHash = signals.volatile.canvasHash
+  const audioHash = signals.volatile.audioHash
+  const isUsableCanvas = !!canvasHash && canvasHash !== 'no-canvas' && canvasHash !== 'canvas-error'
+  const isUsableAudio = !!audioHash && audioHash !== 'no-audio' && audioHash !== 'audio-error'
+
+  if (isUsableCanvas) {
+    const canvasMatch = await db
+      .select()
+      .from(schema.canvasHashes)
+      .where(eq(schema.canvasHashes.canvasHash, canvasHash))
+      .limit(1)
+
+    if (canvasMatch.length > 0) {
+      const existing = await db
+        .select()
+        .from(schema.visitors)
+        .where(eq(schema.visitors.visitorId, canvasMatch[0].visitorId))
+        .limit(1)
+      if (existing.length > 0) {
+        const storedVolatile = extractVolatile(existing[0].signals)
+        const similarity = compareVolatile(signals.volatile, storedVolatile)
+        // Canvas + audio identical → very strong same-browser signal (incognito).
+        // Canvas alone still needs WebGL/font overlap to avoid false links.
+        const canvasAudioBothMatch = isUsableAudio && audioHash === storedVolatile.audioHash
+        const threshold = canvasAudioBothMatch ? 40 : 55
+        if (similarity.score >= threshold) {
+          await ensureDeviceHash(existing[0].visitorId, deviceHash)
+          await ensureStableHash(existing[0].visitorId, stableHash, 'incognito-link')
+          await ensureCanvasHash(existing[0].visitorId, signals.volatile)
+          await touchVisitor(existing[0].visitorId, signals, ip, userAgent, geo, similarity.score, similarity.matched)
+          await cacheSet(cacheKey, { visitorId: existing[0].visitorId }, 3600)
+          return {
+            visitorId: existing[0].visitorId,
+            isNew: false,
+            similarity: similarity.score,
+            matched: similarity.matched,
+            geo
+          }
+        }
+      }
+    }
   }
 
   // 3. Cross-browser device hash lookup (Chrome vs Firefox on same device)
@@ -118,6 +165,7 @@ export async function identifyVisitor(
     visitorId,
     stableHash,
     deviceHash,
+    canvasHash: isUsableCanvas ? canvasHash : null,
     signals: signals as unknown as Record<string, unknown>,
     riskScore: 0,
     riskLevel: 'low',
@@ -134,6 +182,13 @@ export async function identifyVisitor(
     visitorId,
     deviceHash
   })
+  if (isUsableCanvas) {
+    await db.insert(schema.canvasHashes).values({
+      visitorId,
+      canvasHash,
+      audioHash: isUsableAudio ? audioHash : null
+    }).onConflictDoNothing({ target: [schema.canvasHashes.visitorId, schema.canvasHashes.canvasHash] })
+  }
   await logVisit(visitorId, signals, ip, userAgent, geo, 100, [])
   await cacheSet(cacheKey, { visitorId }, 3600)
 
@@ -224,6 +279,32 @@ async function ensureStableHash(visitorId: string, stableHash: string, source: s
   } catch {
     // ignore dup
   }
+}
+
+async function ensureCanvasHash(
+  visitorId: string,
+  volatile: import('../types.js').VolatileSignals
+): Promise<void> {
+  const canvasHash = volatile.canvasHash
+  if (!canvasHash || canvasHash === 'no-canvas' || canvasHash === 'canvas-error') return
+  const audioHash = volatile.audioHash
+  const isUsableAudio = !!audioHash && audioHash !== 'no-audio' && audioHash !== 'audio-error'
+  try {
+    await db
+      .insert(schema.canvasHashes)
+      .values({
+        visitorId,
+        canvasHash,
+        audioHash: isUsableAudio ? audioHash : null
+      })
+      .onConflictDoNothing({ target: [schema.canvasHashes.visitorId, schema.canvasHashes.canvasHash] })
+  } catch {
+    // ignore dup
+  }
+  await db
+    .update(schema.visitors)
+    .set({ canvasHash })
+    .where(eq(schema.visitors.visitorId, visitorId))
 }
 
 function generateVisitorId(): string {

@@ -4,6 +4,29 @@ import { zValidator } from '@hono/zod-validator'
 import { eq, desc, sql, and, gte, count } from 'drizzle-orm'
 import { db, schema } from '../db/client.js'
 import { hashKey, generateApiKey } from '../middleware/auth.js'
+import { parseUA, formatBrowser } from '../utils/ua.js'
+
+function enrichVisit(v: typeof schema.visits.$inferSelect) {
+  const ua = parseUA(v.userAgent || '')
+  return {
+    id: v.id,
+    ip: v.ip,
+    country: v.country,
+    countryName: v.countryName,
+    city: v.city,
+    latitude: v.latitude,
+    longitude: v.longitude,
+    browser: formatBrowser(ua),
+    os: ua.os,
+    device: ua.device,
+    incognito: (v.flags || []).includes('incognito'),
+    vpn: (v.flags || []).includes('vpn'),
+    riskScore: v.riskScore,
+    riskLevel: v.riskLevel,
+    flags: v.flags,
+    createdAt: v.createdAt
+  }
+}
 
 export const dashboardRoute = new Hono()
 
@@ -157,10 +180,30 @@ dashboardRoute.get('/visitors/:id', async (c) => {
     .orderBy(desc(schema.events.createdAt))
     .limit(100)
 
+  // Weekly summary: visits, incognito sessions, distinct IPs, distinct locations
+  const weekAgo = new Date(Date.now() - 7 * 86400000)
+  const weekVisits = visitHistory.filter((v) => v.createdAt >= weekAgo)
+  const distinctIps = new Set(weekVisits.map((v) => v.ip).filter(Boolean)).size
+  const distinctLocations = new Set(
+    weekVisits
+      .map((v) => [v.city, v.countryName].filter(Boolean).join(', '))
+      .filter(Boolean)
+  ).size
+  const incognitoSessions = weekVisits.filter((v) => (v.flags || []).includes('incognito')).length
+
   return c.json({
     visitor: visitor[0],
-    visits: visitHistory,
-    events: eventHistory
+    visits: visitHistory.map(enrichVisit),
+    events: eventHistory,
+    summary: {
+      totalVisits: visitHistory.length,
+      weeklyVisits: weekVisits.length,
+      incognitoSessions,
+      distinctIps,
+      distinctLocations,
+      firstSeen: visitor[0].firstSeen,
+      lastSeen: visitor[0].lastSeen
+    }
   })
 })
 

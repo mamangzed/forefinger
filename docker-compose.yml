@@ -11,6 +11,9 @@ services:
       ALLOWED_ORIGINS: ""
       DASHBOARD_USER: ${DASHBOARD_USER:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-changeme}
+      IPINFO_TOKEN: ${IPINFO_TOKEN:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

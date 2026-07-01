@@ -5,6 +5,8 @@ import { collectAudio } from './collectors/audio'
 import { collectFonts } from './collectors/fonts'
 import { collectNetwork } from './collectors/network'
 import { collectIncognito } from './collectors/incognito'
+import { collectBehavior } from './collectors/behavior'
+import type { BehaviorSample } from './types'
 import { computeStableHash, sendSignals } from './transport'
 import type {
   CollectOptions,
@@ -22,7 +24,9 @@ export async function collect(options: CollectOptions = {}): Promise<CollectResu
   const {
     endpoint = resolveEndpoint(),
     apiKey = resolveApiKey(),
-    sendToServer = true
+    sendToServer = true,
+    behavior = true,
+    behaviorDuration = 4000
   } = options
 
   // Parallel collection - total time = slowest signal
@@ -47,17 +51,29 @@ export async function collect(options: CollectOptions = {}): Promise<CollectResu
 
   const stableHash = await computeStableHash(stable as unknown as Record<string, unknown>)
 
+  // Behavior collected after fingerprint signals (needs time window of interaction).
+  // Skipped when behavior:false (instant collect) or in non-browser/no-interaction envs.
+  let behaviorSample: BehaviorSample | undefined
+  if (behavior) {
+    try {
+      behaviorSample = await collectBehavior(behaviorDuration)
+    } catch {
+      behaviorSample = undefined
+    }
+  }
+
   const signals: CollectedSignals = {
     stable,
     volatile,
     network,
     incognito,
+    behavior: behaviorSample,
     timestamp: Date.now()
   }
 
   if (sendToServer) {
     try {
-      return await sendSignals({ endpoint, apiKey, signals, stableHash })
+      return await sendSignals({ endpoint, apiKey, signals, stableHash, linkedId: options.linkedId, tag: options.tag })
     } catch (err) {
       // Return local-only result on network failure
       return {

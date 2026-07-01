@@ -50,7 +50,7 @@ export const api = {
     if (flag) params.set('flag', flag)
     return request<VisitorListResponse>(`/visitors?${params}`)
   },
-  getVisitor: (id: string) => request<{ visitor: any; visits: any[]; events: any[] }>(`/visitors/${id}`),
+  getVisitor: (id: string) => request<{ visitor: any; visits: any[]; events: any[]; summary: any }>(`/visitors/${id}`),
   getEvents: (limit = 50, type?: string, level?: string) => {
     const params = new URLSearchParams({ limit: String(limit) })
     if (type) params.set('type', type)

@@ -1,7 +1,9 @@
 import type { DetectorResult, CollectedSignals } from '../types.js'
 import { cacheGet, cacheSet } from '../cache/redis.js'
+import { lookupPrivacy, ipinfoEnabled } from '../geo/ipinfo.js'
 
-// Known VPN/datacenter IP ranges (subset - real deployment ships full list)
+// Known VPN/datacenter IP ranges — fallback only when IPinfo privacy addon
+// is unavailable (no token). Coarse but catches obvious cloud/VPS IPs.
 const DATACENTER_RANGES: string[] = [
   // AWS
   '3.0.0.0/9', '13.0.0.0/8', '15.0.0.0/8', '18.0.0.0/8', '34.0.0.0/8',
@@ -26,30 +28,30 @@ export async function detectVpn(ctx: VpnContext): Promise<DetectorResult> {
   let score = 0
   const reasons: string[] = []
 
-  // 1. Datacenter IP check (cached)
-  const cacheKey = `ip_reputation:${ctx.ip}`
-  let reputation = await cacheGet<{ datacenter: boolean; vpn: boolean }>(cacheKey)
-
-  if (!reputation) {
-    const datacenter = isDatacenterIp(ctx.ip)
-    reputation = { datacenter, vpn: datacenter }
-    await cacheSet(cacheKey, reputation, 86400)
+  // 1. IPinfo privacy detection (primary, accurate) — cached 24h in lookupPrivacy
+  if (ipinfoEnabled()) {
+    const privacy = await lookupPrivacy(ctx.ip)
+    if (privacy.vpn) { score += 50; reasons.push('ipinfo:vpn') }
+    if (privacy.proxy) { score += 35; reasons.push('ipinfo:proxy') }
+    if (privacy.tor) { score += 60; reasons.push('ipinfo:tor') }
+    if (privacy.relay) { score += 30; reasons.push('ipinfo:relay') }
+    if (privacy.hosting) { score += 30; reasons.push('ipinfo:hosting') }
+  } else {
+    // Fallback: bundled datacenter range list (coarse, no token configured)
+    const cacheKey = `ip_reputation:${ctx.ip}`
+    let reputation = await cacheGet<{ datacenter: boolean }>(cacheKey)
+    if (!reputation) {
+      const datacenter = isDatacenterIp(ctx.ip)
+      reputation = { datacenter }
+      await cacheSet(cacheKey, reputation, 86400)
+    }
+    if (reputation.datacenter) {
+      score += 40
+      reasons.push('datacenter_ip')
+    }
   }
 
-  if (reputation.datacenter) {
-    score += 40
-    reasons.push('datacenter_ip')
-  }
-
-  // 2. WebRTC leak - local IPs collected by SDK indicate private network
-  // If webrtc leaked multiple IPs or RFC1918 addresses visible, suspicious
-  const webrtcLeak = detectWebrtcLeak(ctx.signals)
-  if (webrtcLeak.detected) {
-    score += 25
-    reasons.push('webrtc_leak')
-  }
-
-  // 3. Timezone vs geo mismatch
+  // 2. Timezone vs geo mismatch (still useful — catches misconfigured VPNs)
   const tzMismatch = checkTimezoneGeo(ctx.signals, ctx.geoCountry)
   if (tzMismatch.detected) {
     score += 30
@@ -70,7 +72,6 @@ function isDatacenterIp(ip: string): boolean {
   const parts = ip.split('.').map(Number)
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p > 255)) return false
   const ipNum = (parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3]
-
   for (const range of DATACENTER_RANGES) {
     if (ipInCidr(ipNum, range)) return true
   }
@@ -86,16 +87,7 @@ function ipInCidr(ipNum: number, cidr: string): boolean {
   return (ipNum & maskNum) === (baseNum & maskNum)
 }
 
-function detectWebrtcLeak(signals: CollectedSignals): { detected: boolean } {
-  // SDK collects webrtcLocalIps in network signals (not in CollectedSignals type yet)
-  // For now, check timezone as proxy indicator handled separately
-  return { detected: false }
-}
-
-function checkTimezoneGeo(
-  signals: CollectedSignals,
-  geoCountry?: string
-): { detected: boolean } {
+function checkTimezoneGeo(signals: CollectedSignals, geoCountry?: string): { detected: boolean } {
   if (!geoCountry) return { detected: false }
   const tz = signals.stable.timezone
   const countryTz: Record<string, string[]> = {

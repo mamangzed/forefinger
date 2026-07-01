@@ -25,6 +25,7 @@ export const visitors = pgTable(
     visitorId: varchar('visitor_id', { length: 64 }).notNull().unique(),
     stableHash: varchar('stable_hash', { length: 64 }).notNull(),
     deviceHash: varchar('device_hash', { length: 48 }),
+    canvasHash: varchar('canvas_hash', { length: 64 }),
     signals: jsonb('signals').notNull(),
     riskScore: integer('risk_score').default(0).notNull(),
     riskLevel: riskLevelEnum('risk_level').default('low').notNull(),
@@ -38,6 +39,7 @@ export const visitors = pgTable(
   (t) => ({
     stableHashIdx: index('idx_visitors_stable_hash').on(t.stableHash),
     deviceHashIdx: index('idx_visitors_device_hash').on(t.deviceHash),
+    canvasHashIdx: index('idx_visitors_canvas_hash').on(t.canvasHash),
     riskIdx: index('idx_visitors_risk').on(t.riskScore),
     lastSeenIdx: index('idx_visitors_last_seen').on(t.lastSeen),
     flagsIdx: index('idx_visitors_flags').on(t.flags),
@@ -101,6 +103,26 @@ export const deviceHashes = pgTable(
     hashIdx: index('idx_device_hashes_hash').on(t.deviceHash),
     visitorIdx: index('idx_device_hashes_visitor').on(t.visitorId),
     uniq: uniqueIndex('idx_device_hashes_uniq').on(t.visitorId, t.deviceHash)
+  })
+)
+
+// Canvas hashes — links incognito sessions of the SAME browser on the same
+// device. Canvas output is stable across private-mode windows (depends on GPU/
+// driver/font rendering, not on browsing state), so identical canvas hash +
+// matching audio/WebGL strongly implies the same browser install.
+export const canvasHashes = pgTable(
+  'canvas_hashes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    visitorId: varchar('visitor_id', { length: 64 }).notNull(),
+    canvasHash: varchar('canvas_hash', { length: 64 }).notNull(),
+    audioHash: varchar('audio_hash', { length: 64 }),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull()
+  },
+  (t) => ({
+    hashIdx: index('idx_canvas_hashes_hash').on(t.canvasHash),
+    visitorIdx: index('idx_canvas_hashes_visitor').on(t.visitorId),
+    uniq: uniqueIndex('idx_canvas_hashes_uniq').on(t.visitorId, t.canvasHash)
   })
 )
 

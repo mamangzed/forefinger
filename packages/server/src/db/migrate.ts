@@ -27,6 +27,7 @@ const STATEMENTS: string[] = [
    )`,
 
   `ALTER TABLE visitors ADD COLUMN IF NOT EXISTS device_hash VARCHAR(48)`,
+  `ALTER TABLE visitors ADD COLUMN IF NOT EXISTS canvas_hash VARCHAR(64)`,
 
   `CREATE TABLE IF NOT EXISTS device_hashes (
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,6 +37,16 @@ const STATEMENTS: string[] = [
    )`,
 
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_device_hashes_uniq ON device_hashes(visitor_id, device_hash)`,
+
+  `CREATE TABLE IF NOT EXISTS canvas_hashes (
+     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     visitor_id    VARCHAR(64) NOT NULL,
+     canvas_hash   VARCHAR(64) NOT NULL,
+     audio_hash    VARCHAR(64),
+     added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_canvas_hashes_uniq ON canvas_hashes(visitor_id, canvas_hash)`,
 
   `CREATE TABLE IF NOT EXISTS visitor_hashes (
      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,6 +118,7 @@ const STATEMENTS: string[] = [
 
   `CREATE INDEX IF NOT EXISTS idx_visitors_stable_hash ON visitors(stable_hash)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_device_hash ON visitors(device_hash)`,
+  `CREATE INDEX IF NOT EXISTS idx_visitors_canvas_hash ON visitors(canvas_hash)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_risk ON visitors(risk_score)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen)`,
   `CREATE INDEX IF NOT EXISTS idx_visitors_flags ON visitors USING GIN(flags)`,

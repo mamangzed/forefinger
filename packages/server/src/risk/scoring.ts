@@ -7,6 +7,8 @@ import { detectRegionSpoofing } from '../detectors/region-spoof.js'
 import { detectMultiAccounting } from '../detectors/multi-account.js'
 import { detectVelocity } from '../detectors/velocity.js'
 import { detectNewDevice } from '../detectors/new-device.js'
+import { detectVm } from '../detectors/vm.js'
+import { detectBehavior } from '../detectors/behavior.js'
 import type { CollectedSignals, RiskResult, DetectorResult, VerifyRequest } from '../types.js'
 
 export interface RiskContext {
@@ -16,6 +18,7 @@ export interface RiskContext {
   ipCountry?: string
   visitorId?: string
   event?: VerifyRequest
+  linkedId?: string
 }
 
 export interface RiskThresholds {
@@ -27,17 +30,19 @@ const DEFAULT_THRESHOLDS: RiskThresholds = { block: 70, review: 40 }
 
 export async function assessRisk(ctx: RiskContext): Promise<RiskResult> {
   // Run all detectors in parallel
-  const [vpn, bot, incognito, region] = await Promise.all([
+  const [vpn, bot, incognito, region, vm, behavior] = await Promise.all([
     detectVpn({ ip: ctx.ip, signals: ctx.signals, geoCountry: ctx.ipCountry }),
     Promise.resolve(
       detectBot({ signals: ctx.signals, userAgent: ctx.userAgent, ip: ctx.ip })
     ),
     Promise.resolve(detectIncognito(ctx.signals)),
-    Promise.resolve(detectRegionSpoofing({ signals: ctx.signals, ipCountry: ctx.ipCountry }))
+    Promise.resolve(detectRegionSpoofing({ signals: ctx.signals, ipCountry: ctx.ipCountry })),
+    Promise.resolve(detectVm(ctx.signals)),
+    Promise.resolve(detectBehavior(ctx.signals))
   ])
 
   const flags: string[] = []
-  const results: DetectorResult[] = [vpn, bot, incognito, region]
+  const results: DetectorResult[] = [vpn, bot, incognito, region, vm, behavior]
 
   // Event-specific detectors
   if (ctx.event && ctx.visitorId) {
@@ -100,7 +105,9 @@ export async function assessRisk(ctx: RiskContext): Promise<RiskResult> {
       regionSpoofing: region.detected,
       multiAccounting: results.find((r) => r.flag === 'multi_accounting')?.detected ?? false,
       newDevice: results.find((r) => r.flag === 'new_device')?.detected ?? false,
-      suspiciousVelocity: results.find((r) => r.flag === 'suspicious_velocity')?.detected ?? false
+      suspiciousVelocity: results.find((r) => r.flag === 'suspicious_velocity')?.detected ?? false,
+      vm: vm.detected,
+      automation: behavior.detected
     }
   }
 }
